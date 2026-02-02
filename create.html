@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Magical Flower Garden</title>
+
+<style>
+html,body{
+margin:0;
+background: black;
+overflow:hidden;
+font-family: 'Georgia', serif;
+}
+
+#hint{
+position:absolute;
+top:45%;
+width:100%;
+text-align:center;
+color:white;
+font-size:36px;
+pointer-events:none;
+opacity:.9;
+text-shadow: 0 0 20px rgba(255,255,255,0.5), 0 0 40px rgba(147,112,219,0.8);
+animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+0%, 100% { transform: scale(1); opacity: 0.9; }
+50% { transform: scale(1.05); opacity: 1; }
+}
+
+
+canvas{
+display:block;
+cursor: crosshair;
+}
+</style>
+</head>
+
+<body>
+
+<div id="hint">✨ Click Anywhere To Grow Magical Flowers ✨</div>
+
+<canvas id="canvas"></canvas>
+
+<script>
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = innerWidth;
+canvas.height = innerHeight;
+
+let flowers = [];
+let particles = [];
+let flowerType = 'random';
+
+class Particle {
+constructor(x, y, color) {
+this.x = x;
+this.y = y;
+this.vx = (Math.random() - 0.5) * 2;
+this.vy = (Math.random() - 0.5) * 2 - 1;
+this.life = 1;
+this.color = color;
+this.size = 2 + Math.random() * 3;
+}
+
+update() {
+this.x += this.vx;
+this.y += this.vy;
+this.vy += 0.05;
+this.life -= 0.01;
+}
+
+draw() {
+ctx.globalAlpha = this.life;
+ctx.fillStyle = this.color;
+ctx.beginPath();
+ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+ctx.fill();
+ctx.globalAlpha = 1;
+}
+}
+
+class Flower {
+constructor(x, type) {
+this.baseX = x;
+this.h = 0;
+this.max = 180 + Math.random() * 250;
+this.offset = Math.random() * 100;
+this.speed = 1.5 + Math.random() * 1.5;
+this.type = type === 'random' ? 
+['rose', 'daisy', 'sunflower', 'tulip'][Math.floor(Math.random() * 4)] : type;
+this.stemWidth = 3 + Math.random() * 2;
+this.leafOffset = Math.random() * Math.PI * 2;
+this.sparkleTime = Math.random() * 1000;
+this.growing = true;
+this.maturity = 0;
+this.glowIntensity = Math.random() * 0.5 + 0.5;
+this.rotationSpeed = (Math.random() - 0.5) * 0.02;
+this.rotation = 0;
+this.particleTimer = 0;
+this.setColors();
+}
+
+setColors() {
+const colorSchemes = {
+rose: {
+petals: ['#ff1744', '#f50057', '#ff4081', '#ff80ab'],
+center: '#ffeb3b',
+stem: '#2e7d32'
+},
+daisy: {
+petals: ['#ffffff', '#fffde7', '#fff9c4', '#f0f0f0'],
+center: '#ffd600',
+stem: '#43a047'
+},
+sunflower: {
+petals: ['#ffd600', '#ffea00', '#ffc107', '#ffab00'],
+center: '#4e342e',
+stem: '#558b2f'
+},
+tulip: {
+petals: ['#e040fb', '#d500f9', '#ea80fc', '#ce93d8'],
+center: '#ffeb3b',
+stem: '#66bb6a'
+}
+};
+const scheme = colorSchemes[this.type];
+this.petalColors = scheme.petals;
+this.centerColor = scheme.center;
+this.stemColor = scheme.stem;
+}
+
+update() {
+if (this.h < this.max) {
+this.h += this.speed;
+this.maturity = this.h / this.max;
+} else {
+this.growing = false;
+}
+this.rotation += this.rotationSpeed * this.maturity;
+this.particleTimer++;
+}
+
+drawStem() {
+let sway = Math.sin(Date.now() / 600 + this.offset) * 30 * this.maturity;
+
+// Gradient stem
+let gradient = ctx.createLinearGradient(this.baseX, canvas.height, this.baseX + sway * 1.5, canvas.height - this.h);
+gradient.addColorStop(0, this.stemColor);
+gradient.addColorStop(1, '#a5d6a7');
+
+ctx.lineWidth = this.stemWidth;
+ctx.strokeStyle = gradient;
+ctx.shadowBlur = 5;
+ctx.shadowColor = this.stemColor;
+ctx.beginPath();
+ctx.moveTo(this.baseX, canvas.height);
+ctx.quadraticCurveTo(
+this.baseX + sway * 0.5, canvas.height - this.h / 2,
+this.baseX + sway * 1.5, canvas.height - this.h
+);
+ctx.stroke();
+ctx.shadowBlur = 0;
+
+// Draw leaves
+if (this.maturity > 0.3) {
+let leafY = canvas.height - this.h * 0.4;
+let leafX = this.baseX + sway * 0.5;
+
+for (let side of [-1, 1]) {
+ctx.fillStyle = this.stemColor;
+ctx.beginPath();
+ctx.ellipse(
+leafX + side * 15,
+leafY,
+12, 20,
+side * 0.5 + Math.sin(Date.now() / 800 + this.leafOffset) * 0.3,
+0, Math.PI * 2
+);
+ctx.fill();
+}
+}
+}
+
+drawFlower(fx, fy) {
+ctx.save();
+ctx.translate(fx, fy);
+ctx.rotate(this.rotation);
+
+if (this.type === 'rose') {
+this.drawRose();
+} else if (this.type === 'daisy') {
+this.drawDaisy();
+} else if (this.type === 'sunflower') {
+this.drawSunflower();
+} else if (this.type === 'tulip') {
+this.drawTulip();
+}
+
+ctx.restore();
+
+// Sparkle effect
+if (this.maturity === 1 && this.particleTimer % 60 === 0) {
+for (let i = 0; i < 3; i++) {
+particles.push(new Particle(
+fx + (Math.random() - 0.5) * 30,
+fy + (Math.random() - 0.5) * 30,
+this.petalColors[Math.floor(Math.random() * this.petalColors.length)]
+));
+}
+}
+}
+
+drawRose() {
+// Multiple layers of petals
+for (let layer = 3; layer > 0; layer--) {
+let petalCount = 8;
+let radius = 18 * layer / 3 * this.maturity;
+for (let i = 0; i < petalCount; i++) {
+let a = i * Math.PI * 2 / petalCount + layer * 0.3;
+let colorIdx = Math.floor(Math.random() * this.petalColors.length);
+ctx.fillStyle = this.petalColors[colorIdx];
+ctx.shadowBlur = 15 * this.glowIntensity;
+ctx.shadowColor = this.petalColors[0];
+ctx.beginPath();
+ctx.ellipse(
+Math.cos(a) * radius * 0.7,
+Math.sin(a) * radius * 0.7,
+12 * this.maturity, 18 * this.maturity,
+a, 0, Math.PI * 2
+);
+ctx.fill();
+}
+}
+ctx.shadowBlur = 0;
+
+// Center
+ctx.fillStyle = this.centerColor;
+ctx.beginPath();
+ctx.arc(0, 0, 5 * this.maturity, 0, Math.PI * 2);
+ctx.fill();
+}
+
+drawDaisy() {
+// Petals
+for (let i = 0; i < 12; i++) {
+let a = i * Math.PI * 2 / 12;
+ctx.fillStyle = this.petalColors[i % this.petalColors.length];
+ctx.shadowBlur = 10;
+ctx.shadowColor = '#ffffff';
+ctx.beginPath();
+ctx.ellipse(
+Math.cos(a) * 10 * this.maturity,
+Math.sin(a) * 10 * this.maturity,
+8 * this.maturity, 16 * this.maturity,
+a, 0, Math.PI * 2
+);
+ctx.fill();
+}
+ctx.shadowBlur = 0;
+
+// Center
+let gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, 8 * this.maturity);
+gradient.addColorStop(0, '#ffff00');
+gradient.addColorStop(1, '#ffa000');
+ctx.fillStyle = gradient;
+ctx.beginPath();
+ctx.arc(0, 0, 8 * this.maturity, 0, Math.PI * 2);
+ctx.fill();
+}
+
+drawSunflower() {
+// Outer petals
+for (let i = 0; i < 16; i++) {
+let a = i * Math.PI * 2 / 16;
+ctx.fillStyle = this.petalColors[i % this.petalColors.length];
+ctx.shadowBlur = 15;
+ctx.shadowColor = '#ff6f00';
+ctx.beginPath();
+ctx.ellipse(
+Math.cos(a) * 14 * this.maturity,
+Math.sin(a) * 14 * this.maturity,
+10 * this.maturity, 20 * this.maturity,
+a, 0, Math.PI * 2
+);
+ctx.fill();
+}
+ctx.shadowBlur = 0;
+
+// Center with seed pattern
+ctx.fillStyle = this.centerColor;
+ctx.beginPath();
+ctx.arc(0, 0, 12 * this.maturity, 0, Math.PI * 2);
+ctx.fill();
+
+// Seeds
+ctx.fillStyle = '#3e2723';
+for (let i = 0; i < 30; i++) {
+let a = i * 2.4;
+let r = (i * 0.4) * this.maturity;
+ctx.beginPath();
+ctx.arc(Math.cos(a) * r, Math.sin(a) * r, 1.5, 0, Math.PI * 2);
+ctx.fill();
+}
+}
+
+drawTulip() {
+// Tulip petals (bell shape)
+for (let i = 0; i < 6; i++) {
+let a = i * Math.PI / 3;
+ctx.fillStyle = this.petalColors[i % this.petalColors.length];
+ctx.shadowBlur = 20;
+ctx.shadowColor = this.petalColors[0];
+ctx.beginPath();
+ctx.ellipse(
+Math.cos(a) * 5 * this.maturity,
+Math.sin(a) * 3 * this.maturity - 5 * this.maturity,
+12 * this.maturity, 24 * this.maturity,
+a, 0, Math.PI
+);
+ctx.fill();
+}
+ctx.shadowBlur = 0;
+
+// Center
+ctx.fillStyle = this.centerColor;
+ctx.beginPath();
+ctx.arc(0, 0, 4 * this.maturity, 0, Math.PI * 2);
+ctx.fill();
+}
+
+draw() {
+let sway = Math.sin(Date.now() / 600 + this.offset) * 30 * this.maturity;
+let fx = this.baseX + sway * 1.5;
+let fy = canvas.height - this.h;
+
+this.drawStem();
+this.drawFlower(fx, fy);
+}
+}
+
+canvas.onclick = e => {
+document.getElementById("hint").style.display = "none";
+flowers.push(new Flower(e.clientX, flowerType));
+};
+
+function clearGarden() {
+flowers = [];
+particles = [];
+}
+
+function animate() {
+// Black background with transparency for trail effect
+ctx.fillStyle = 'rgba(0, 0, 0, 0.25)';
+ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+// Update and draw flowers
+flowers.forEach(f => {
+f.update();
+f.draw();
+});
+
+// Update and draw particles
+particles = particles.filter(p => {
+p.update();
+p.draw();
+return p.life > 0;
+});
+
+requestAnimationFrame(animate);
+}
+
+animate();
+
+onresize = () => {
+canvas.width = innerWidth;
+canvas.height = innerHeight;
+};
+</script>
+
+</body>
+</html>
